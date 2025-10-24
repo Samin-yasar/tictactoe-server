@@ -19,34 +19,52 @@ const games = {};
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
-  socket.on('createGame', ({ gridSize }, callback) => {
+  socket.on('createGame', (data, callback) => {
+    // Validate gridSize
+    const gridSize = data?.gridSize || 3;
+    
+    // Ensure gridSize is valid (3, 6, or 12)
+    const validGridSize = [3, 6, 12].includes(gridSize) ? gridSize : 3;
+    
     const gameId = Math.random().toString(36).substring(2, 8).toUpperCase();
     games[gameId] = {
-      board: Array(gridSize * gridSize).fill(''),
+      board: Array(validGridSize * validGridSize).fill(''),
       currentPlayer: 'X',
       gameActive: true,
       scores: { X: 0, O: 0, ties: 0 },
       players: { X: socket.id, O: null },
-      gridSize: gridSize
+      gridSize: validGridSize
     };
     socket.join(gameId);
-    callback({ gameId, role: 'X' });
-    console.log(`Game created: ${gameId} with ${gridSize}x${gridSize} grid`);
+    
+    if (callback && typeof callback === 'function') {
+      callback({ gameId, role: 'X' });
+    }
+    
+    console.log(`Game created: ${gameId} with ${validGridSize}x${validGridSize} grid`);
   });
 
   socket.on('joinGame', ({ gameId }, callback) => {
     const game = games[gameId];
     if (!game) {
-      callback({ error: 'Game not found' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Game not found' });
+      }
       return;
     }
     if (game.players.O) {
-      callback({ error: 'Game is full' });
+      if (callback && typeof callback === 'function') {
+        callback({ error: 'Game is full' });
+      }
       return;
     }
     game.players.O = socket.id;
     socket.join(gameId);
-    callback({ success: true, role: 'O', gridSize: game.gridSize });
+    
+    if (callback && typeof callback === 'function') {
+      callback({ success: true, role: 'O', gridSize: game.gridSize });
+    }
+    
     io.to(gameId).emit('gameState', game);
     console.log(`Player joined game: ${gameId}`);
   });

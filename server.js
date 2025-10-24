@@ -19,18 +19,19 @@ const games = {};
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
 
-  socket.on('createGame', (callback) => {
+  socket.on('createGame', ({ gridSize }, callback) => {
     const gameId = Math.random().toString(36).substring(2, 8).toUpperCase();
     games[gameId] = {
-      board: ['', '', '', '', '', '', '', '', ''],
+      board: Array(gridSize * gridSize).fill(''),
       currentPlayer: 'X',
       gameActive: true,
       scores: { X: 0, O: 0, ties: 0 },
-      players: { X: socket.id, O: null }
+      players: { X: socket.id, O: null },
+      gridSize: gridSize
     };
     socket.join(gameId);
     callback({ gameId, role: 'X' });
-    console.log('Game created:', gameId);
+    console.log(`Game created: ${gameId} with ${gridSize}x${gridSize} grid`);
   });
 
   socket.on('joinGame', ({ gameId }, callback) => {
@@ -45,9 +46,9 @@ io.on('connection', (socket) => {
     }
     game.players.O = socket.id;
     socket.join(gameId);
-    callback({ success: true, role: 'O' });
+    callback({ success: true, role: 'O', gridSize: game.gridSize });
     io.to(gameId).emit('gameState', game);
-    console.log('Player joined game:', gameId);
+    console.log(`Player joined game: ${gameId}`);
   });
 
   socket.on('makeMove', ({ gameId, index, player }) => {
@@ -57,7 +58,7 @@ io.on('connection', (socket) => {
 
     game.board[index] = player;
 
-    const winner = checkWinner(game.board);
+    const winner = checkWinner(game.board, game.gridSize);
     if (winner) {
       game.scores[winner]++;
       game.gameActive = false;
@@ -75,7 +76,7 @@ io.on('connection', (socket) => {
     const game = games[gameId];
     if (!game) return;
 
-    game.board = ['', '', '', '', '', '', '', '', ''];
+    game.board = Array(game.gridSize * game.gridSize).fill('');
     game.currentPlayer = 'X';
     game.gameActive = true;
 
@@ -86,7 +87,7 @@ io.on('connection', (socket) => {
     const game = games[gameId];
     if (!game) return;
 
-    game.board = ['', '', '', '', '', '', '', '', ''];
+    game.board = Array(game.gridSize * game.gridSize).fill('');
     game.currentPlayer = 'X';
     game.gameActive = true;
     game.scores = { X: 0, O: 0, ties: 0 };
@@ -99,19 +100,77 @@ io.on('connection', (socket) => {
   });
 });
 
-function checkWinner(board) {
-  const winPatterns = [
-    [0, 1, 2], [3, 4, 5], [6, 7, 8],
-    [0, 3, 6], [1, 4, 7], [2, 5, 8],
-    [0, 4, 8], [2, 4, 6]
-  ];
-
-  for (const pattern of winPatterns) {
-    const [a, b, c] = pattern;
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return board[a];
+function checkWinner(board, gridSize) {
+  const winLength = gridSize === 3 ? 3 : gridSize === 6 ? 4 : 5;
+  
+  // Check rows
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col <= gridSize - winLength; col++) {
+      const start = row * gridSize + col;
+      let winner = board[start];
+      if (!winner) continue;
+      let win = true;
+      for (let i = 1; i < winLength; i++) {
+        if (board[start + i] !== winner) {
+          win = false;
+          break;
+        }
+      }
+      if (win) return winner;
     }
   }
+
+  // Check columns
+  for (let col = 0; col < gridSize; col++) {
+    for (let row = 0; row <= gridSize - winLength; row++) {
+      const start = row * gridSize + col;
+      let winner = board[start];
+      if (!winner) continue;
+      let win = true;
+      for (let i = 1; i < winLength; i++) {
+        if (board[start + i * gridSize] !== winner) {
+          win = false;
+          break;
+        }
+      }
+      if (win) return winner;
+    }
+  }
+
+  // Check diagonals (top-left to bottom-right)
+  for (let row = 0; row <= gridSize - winLength; row++) {
+    for (let col = 0; col <= gridSize - winLength; col++) {
+      const start = row * gridSize + col;
+      let winner = board[start];
+      if (!winner) continue;
+      let win = true;
+      for (let i = 1; i < winLength; i++) {
+        if (board[start + i * (gridSize + 1)] !== winner) {
+          win = false;
+          break;
+        }
+      }
+      if (win) return winner;
+    }
+  }
+
+  // Check diagonals (top-right to bottom-left)
+  for (let row = 0; row <= gridSize - winLength; row++) {
+    for (let col = winLength - 1; col < gridSize; col++) {
+      const start = row * gridSize + col;
+      let winner = board[start];
+      if (!winner) continue;
+      let win = true;
+      for (let i = 1; i < winLength; i++) {
+        if (board[start + i * (gridSize - 1)] !== winner) {
+          win = false;
+          break;
+        }
+      }
+      if (win) return winner;
+    }
+  }
+
   return null;
 }
 
